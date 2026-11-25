@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-serif: var(--font-serif);
+  --font-sans: var(--font-sans-ui);
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: #0f1115;
+  color: #f5efe6;
+  font-family: var(--font-sans-ui), system-ui, sans-serif;
+}
+
+/* Sin selección, sin menú de "Copiar / Guardar imagen", sin zoom ni scroll al mantener el dedo */
+.no-touch-ui,
+.no-touch-ui * {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+
+.no-touch-ui img,
+.no-touch-ui svg {
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
