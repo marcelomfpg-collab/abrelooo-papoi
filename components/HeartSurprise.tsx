@@ -19,7 +19,7 @@ const TEXTS = {
   hint: "Mantén presionado…",
   holding: "no sueltes…",
   title: "Te quiero",
-  subtitle: "Holiii, sé que estás ocupada, pero solo vengo a recordarte cuánto te quiero.",
+  subtitle: "Olaaaaa, sé que estás ocupada, pero solo vengo a recordarte cuánto te quiero.",
   muteLabel: "Silenciar música",
   unmuteLabel: "Activar música",
   tapForMusic: "toca la pantalla para escuchar la música ♪",
