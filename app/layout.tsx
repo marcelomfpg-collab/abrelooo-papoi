@@ -15,8 +15,9 @@ const sans = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Para Camila",
+  title: "Ábrelooo papoi",
   description: "Mantén presionado…",
+  openGraph: { title: "Ábrelooo papoi", description: "Mantén presionado…" },
 };
 
 export const viewport: Viewport = {
