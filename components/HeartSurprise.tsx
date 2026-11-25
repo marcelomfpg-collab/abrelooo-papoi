@@ -16,6 +16,8 @@ const AUDIO_START_TIME = 0;
 const AUDIO_SRC = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ""}/media/your-man.mp3`;
 
 const TEXTS = {
+  intro: "toca el corazón para empezar",
+  introNote: "sube el volumen 🔊",
   hint: "Mantén presionado…",
   holding: "no sueltes…",
   title: "Te quiero",
@@ -72,10 +74,10 @@ function vibrate(pattern: number | number[]) {
   }
 }
 
-type Phase = "idle" | "exploded";
+type Phase = "intro" | "idle" | "exploded";
 
 export default function HeartSurprise() {
-  const [phase, setPhase] = useState<Phase>("idle");
+  const [phase, setPhase] = useState<Phase>("intro");
   const [muted, setMuted] = useState(false);
   const [needsTap, setNeedsTap] = useState(false);
   const [audioOk, setAudioOk] = useState(true);
@@ -97,6 +99,7 @@ export default function HeartSurprise() {
   const lastTouchRef = useRef(0);
   const holdStartRef = useRef({ time: 0, from: 0 });
   const userMutedRef = useRef(false);
+  const introRef = useRef(true);
 
   /* Precarga de audio y confetti */
   useEffect(() => {
@@ -139,6 +142,39 @@ export default function HeartSurprise() {
       );
     }
   }, []);
+
+  /**
+   * iPhone solo deja sonar un <audio> si se le dio play() dentro de un toque completo (tap).
+   * En el primer toque lo "bendecimos": play() y pausa enseguida (la canción empieza con fade-in,
+   * así que no se escucha nada). Después ya se puede reproducir sin gesto, justo al explotar.
+   */
+  const unlockAudio = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.muted = false;
+    try {
+      audio.currentTime = 0;
+    } catch {}
+    audio.play().then(
+      () => {
+        if (!explodedRef.current) {
+          audio.pause();
+          try {
+            audio.currentTime = AUDIO_START_TIME;
+          } catch {}
+        }
+      },
+      () => {}
+    );
+  }, []);
+
+  const finishIntro = useCallback(() => {
+    if (!introRef.current) return;
+    introRef.current = false;
+    unlockAudio();
+    vibrate(20);
+    setPhase("idle");
+  }, [unlockAudio]);
 
   /* ─── Clímax ─── */
   const explode = useCallback(() => {
@@ -282,26 +318,15 @@ export default function HeartSurprise() {
 
   /* ─── Entrada: presionar / soltar ─── */
   const startHold = useCallback(() => {
-    if (explodedRef.current || holdingRef.current) return;
+    if (introRef.current || explodedRef.current || holdingRef.current) return;
     springRef.current?.stop();
     holdingRef.current = true;
     holdStartRef.current = { time: performance.now(), from: clamp01(progressRef.current) };
-
-    // Desbloquea el audio dentro del gesto del usuario (iOS/Android): arranca en silencio.
-    const audio = audioRef.current;
-    if (audio && audio.paused) {
-      audio.muted = true;
-      try {
-        audio.currentTime = AUDIO_START_TIME;
-      } catch {}
-      audio.play().catch(() => {});
-    }
   }, []);
 
   const endHold = useCallback(() => {
     if (explodedRef.current || !holdingRef.current) return;
     holdingRef.current = false;
-    audioRef.current?.pause();
     springRef.current = animate(progressRef.current, 0, {
       type: "spring",
       stiffness: 140,
@@ -332,6 +357,7 @@ export default function HeartSurprise() {
   };
   const onTouchEnd = (e: React.TouchEvent) => {
     lastTouchRef.current = Date.now();
+    if (introRef.current) return finishIntro(); // touchend = gesto válido en iOS
     if (e.touches.length === 0) endHold();
   };
   const onMouseDown = (e: React.MouseEvent) => {
@@ -340,6 +366,7 @@ export default function HeartSurprise() {
   };
   const onMouseUp = () => {
     if (Date.now() - lastTouchRef.current < 800) return;
+    if (introRef.current) return finishIntro();
     endHold();
   };
 
@@ -493,11 +520,25 @@ export default function HeartSurprise() {
                 animate={{ y: [0, -2, 0] }}
                 transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
               >
-                {TEXTS.hint}
+                {phase === "intro" ? TEXTS.intro : TEXTS.hint}
               </motion.span>
               <span ref={holdHintRef} className="absolute inset-0 italic opacity-0" style={{ fontFamily: "var(--font-serif)", letterSpacing: "0.12em", fontSize: 17 }}>
                 {TEXTS.holding}
               </span>
+            </motion.p>
+          )}
+        </AnimatePresence>
+        <AnimatePresence>
+          {phase === "intro" && (
+            <motion.p
+              key="intro-note"
+              className="mt-3 text-[12px] tracking-[0.2em] text-[#E8D9C9]/55"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, transition: { duration: 0.3 } }}
+              transition={{ duration: 1.2, delay: 0.9 }}
+            >
+              {TEXTS.introNote}
             </motion.p>
           )}
         </AnimatePresence>
