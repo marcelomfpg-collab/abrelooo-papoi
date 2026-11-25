@@ -22,7 +22,7 @@ const TEXTS = {
   subtitle: "Holiii, sé que estás ocupada, pero solo vengo a recordarte cuánto te quiero.",
   muteLabel: "Silenciar música",
   unmuteLabel: "Activar música",
-  tapForMusic: "toca para la música",
+  tapForMusic: "toca la pantalla para escuchar la música ♪",
 };
 
 /* ─────────────────────────────────────────────────────────────────── */
@@ -96,6 +96,7 @@ export default function HeartSurprise() {
   const springRef = useRef<AnimationPlaybackControls | null>(null);
   const lastTouchRef = useRef(0);
   const holdStartRef = useRef({ time: 0, from: 0 });
+  const userMutedRef = useRef(false);
 
   /* Precarga de audio y confetti */
   useEffect(() => {
@@ -104,7 +105,16 @@ export default function HeartSurprise() {
     audio.loop = true;
     audio.setAttribute("playsinline", "");
     audio.addEventListener("error", () => setAudioOk(false));
+    audio.addEventListener("playing", () => {
+      if (!audio.muted) setNeedsTap(false);
+    });
     audioRef.current = audio;
+
+    // iOS 17+: que suene aunque el iPhone esté en modo silencio.
+    try {
+      const session = (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+      if (session) session.type = "playback";
+    } catch {}
 
     import("canvas-confetti").then((m) => {
       confettiRef.current = m.default;
@@ -114,6 +124,20 @@ export default function HeartSurprise() {
       audio.pause();
       audioRef.current = null;
     };
+  }, []);
+
+  /** Arranca la música con sonido. Debe llamarse idealmente dentro de un gesto (touchend/click). */
+  const startMusic = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio || userMutedRef.current) return;
+    audio.muted = false;
+    audio.volume = 1;
+    if (audio.paused) {
+      audio.play().then(
+        () => setNeedsTap(false),
+        () => {}
+      );
+    }
   }, []);
 
   /* ─── Clímax ─── */
@@ -130,8 +154,13 @@ export default function HeartSurprise() {
       try {
         audio.currentTime = AUDIO_START_TIME;
       } catch {}
-      audio.muted = false;
-      audio.play().catch(() => setNeedsTap(true));
+      startMusic();
+      // iPhone no deja arrancar audio sin un "toque completo"; si no está sonando,
+      // suena al levantar el dedo (ver efecto de abajo) o se muestra el aviso.
+      setTimeout(() => {
+        const a = audioRef.current;
+        if (a && !userMutedRef.current && (a.paused || a.muted)) setNeedsTap(true);
+      }, 1800);
     }
 
     const confetti = confettiRef.current;
@@ -156,7 +185,7 @@ export default function HeartSurprise() {
       if (Date.now() < end) requestAnimationFrame(drizzle);
     };
     setTimeout(drizzle, 700);
-  }, []);
+  }, [startMusic]);
 
   /* ─── Bucle de animación (latido, llenado, grietas, destellos, vibración) ─── */
   useEffect(() => {
@@ -232,6 +261,25 @@ export default function HeartSurprise() {
     return () => cancelAnimationFrame(raf);
   }, [explode]);
 
+  /* Después de explotar: al levantar el dedo o tocar en cualquier parte, arranca la música.
+     touchend/click sí cuentan como gesto en iOS (touchstart no), así que aquí play() no se bloquea. */
+  useEffect(() => {
+    if (phase !== "exploded") return;
+    const kick = () => {
+      const a = audioRef.current;
+      if (a && !userMutedRef.current && (a.paused || a.muted)) startMusic();
+    };
+    const opts = { capture: true } as const;
+    document.addEventListener("touchend", kick, opts);
+    document.addEventListener("click", kick, opts);
+    document.addEventListener("pointerup", kick, opts);
+    return () => {
+      document.removeEventListener("touchend", kick, opts);
+      document.removeEventListener("click", kick, opts);
+      document.removeEventListener("pointerup", kick, opts);
+    };
+  }, [phase, startMusic]);
+
   /* ─── Entrada: presionar / soltar ─── */
   const startHold = useCallback(() => {
     if (explodedRef.current || holdingRef.current) return;
@@ -298,15 +346,14 @@ export default function HeartSurprise() {
   const toggleMute = () => {
     const audio = audioRef.current;
     if (!audio) return;
-    if (audio.paused) {
-      audio.muted = false;
-      audio.play().then(() => {
-        setNeedsTap(false);
-        setMuted(false);
-      }).catch(() => {});
+    if (audio.paused || needsTap) {
+      userMutedRef.current = false;
+      setMuted(false);
+      startMusic();
       return;
     }
     audio.muted = !audio.muted;
+    userMutedRef.current = audio.muted;
     setMuted(audio.muted);
   };
 
@@ -511,6 +558,20 @@ export default function HeartSurprise() {
             >
               {TEXTS.subtitle}
             </motion.p>
+            <AnimatePresence>
+              {needsTap && audioOk && (
+                <motion.p
+                  key="tap"
+                  className="mt-8 rounded-full bg-[#D62839]/10 px-5 py-2.5 text-[13px] tracking-[0.08em] text-[#B0233A]"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: [0.65, 1, 0.65], y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ opacity: { duration: 1.8, repeat: Infinity }, y: { duration: 0.5 } }}
+                >
+                  {TEXTS.tapForMusic}
+                </motion.p>
+              )}
+            </AnimatePresence>
           </motion.section>
         )}
       </AnimatePresence>
@@ -532,7 +593,6 @@ export default function HeartSurprise() {
             transition={{ delay: 2, duration: 0.8 }}
             whileTap={{ scale: 0.92 }}
           >
-            {needsTap && <span className="text-[11px] tracking-[0.18em] lowercase">{TEXTS.tapForMusic}</span>}
             <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
               <path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" />
               {muted || needsTap ? (
